@@ -185,9 +185,12 @@ function btn(label,attrs,onClick){const b=el("button",{...attrs,onClick});b.inne
 function inp(attrs){return el("input",attrs);}
 function sel(attrs,options,value){
   const s=el("select",attrs);
-  for(const o of options){
-    const op=el("option",{value:o.v||o},o.l?[o.l]:[o]);
-    if((o.v||o)===value)op.selected=true;
+  const opts=Array.isArray(options)?options:[];
+  for(const o of opts){
+    const v=typeof o==="object"?(o.v||o.l||""):o;
+    const l=typeof o==="object"?(o.l||o.v||""):o;
+    const op=el("option",{value:v},[l]);
+    if(v===String(value||""))op.selected=true;
     s.appendChild(op);
   }
   return s;
@@ -236,7 +239,8 @@ function renderApp(){
     const dueIn=inp({type:"date"});
     const priSel=sel({},{options:PRIORITIES},fPri);
     PRIORITIES.forEach(p=>{const o=priSel.querySelector(`option[value="${p}"]`)||priSel.options[PRIORITIES.indexOf(p)];if(o)o.value=p;});
-    const catSel=sel({},cats,cats[0]);
+    const catOptions=cats.length>0?cats:DEFAULT_CATS;
+    const catSel=sel({},catOptions,catOptions[0]);
 
     [["DUE_DATE",dueIn],["PRIORITY",priSel],["CATEGORY",catSel]].forEach(([label,control])=>{
       const wrap=div({});
