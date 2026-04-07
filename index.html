@@ -69,7 +69,11 @@
   #toast.err { border-color: #ff2d5566; color: #ff2d55; }
   .spinner { display: inline-block; width: 10px; height: 10px; border: 1px solid #00e5ff44; border-top-color: #00e5ff; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .tl-wrap { overflow-x: auto; padding-bottom: 8px; }
+  .tl-wrap::-webkit-scrollbar { height: 8px; }
+  .tl-wrap::-webkit-scrollbar-track { background: #0f0f1e; border-radius: 4px; }
+  .tl-wrap::-webkit-scrollbar-thumb { background: #00e5ff55; border-radius: 4px; }
+  .tl-wrap::-webkit-scrollbar-thumb:hover { background: #00e5ffaa; }
+  .tl-wrap { scrollbar-color: #00e5ff55 #0f0f1e; scrollbar-width: thin; }
   .tl-inner { display: flex; flex-direction: column; }
   .tl-header-row { display: flex; }
   .tl-bar-row { display: flex; align-items: center; margin-bottom: 5px; }
