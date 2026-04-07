@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TASK_MATRIX</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a12; color: #e0f0ff; font-family: 'Courier New', monospace; min-height: 100vh; padding: 1.5rem 1rem; }
+  h1 { font-size: 18px; color: #00e5ff; letter-spacing: 4px; font-weight: bold; }
+  .muted { color: #5a7a8a; }
+  .danger-text { color: #ff2d55; }
+  input, select, textarea {
+    background: #0a0e1a; border: 1px solid #00e5ff44; color: #e0f0ff;
+    padding: 6px 10px; border-radius: 4px; font-family: 'Courier New', monospace;
+    font-size: 12px; outline: none; width: 100%;
+  }
+  input:focus, select:focus { border-color: #00e5ff; }
+  button {
+    background: transparent; border: 1px solid #00e5ff66; color: #00e5ff;
+    padding: 5px 12px; border-radius: 3px; font-family: 'Courier New', monospace;
+    font-size: 11px; cursor: pointer; letter-spacing: 1px;
+  }
+  button:hover { background: #00e5ff18; border-color: #00e5ff; }
+  button.primary { border-color: #00e5ff; background: #00e5ff18; }
+  button.primary:hover { background: #00e5ff30; }
+  button.danger { border-color: #ff2d5566; color: #ff2d55; }
+  button.danger:hover { background: #ff2d5518; }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+  .card {
+    background: #0f0f1e; border: 1px solid #00e5ff33; border-radius: 6px;
+    padding: 10px 14px; transition: border-color 0.15s;
+  }
+  .card:hover { border-color: #00e5ff55; }
+  .tab-bar { display: flex; border-bottom: 1px solid #00e5ff22; margin-bottom: 14px; }
+  .tab {
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    color: #5a7a8a; padding: 6px 14px; font-family: 'Courier New', monospace;
+    font-size: 12px; cursor: pointer; letter-spacing: 1px; margin-bottom: -1px;
+  }
+  .tab.active { color: #00e5ff; border-bottom-color: #00e5ff; }
+  .pill { padding: 2px 8px; border-radius: 2px; font-size: 10px; letter-spacing: 1px; font-weight: bold; }
+  .cat-pill {
+    background: transparent; border: 1px solid #00e5ff44; color: #5a7a8a;
+    padding: 3px 10px; border-radius: 3px; font-size: 11px; cursor: pointer;
+  }
+  .cat-pill.active { border-color: #00e5ff; color: #00e5ff; background: #00e5ff12; }
+  .check {
+    width: 16px; height: 16px; border-radius: 2px; border: 1px solid #00e5ff66;
+    background: transparent; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .check.done { background: #00e5ff22; border-color: #00e5ff; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row-top { display: flex; align-items: flex-start; gap: 10px; }
+  .flex1 { flex: 1; min-width: 0; }
+  .task-title { font-size: 12px; line-height: 1.4; margin-bottom: 6px; }
+  .meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .field-label { font-size: 10px; color: #5a7a8a; margin-bottom: 3px; letter-spacing: 1px; }
+  #toast {
+    position: fixed; bottom: 1.5rem; right: 1.5rem;
+    background: #0f0f1e; border: 1px solid #00e5ff66; color: #00e5ff;
+    padding: 8px 16px; border-radius: 4px; font-size: 11px; letter-spacing: 1px;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999;
+  }
+  #toast.show { opacity: 1; }
+  #toast.err { border-color: #ff2d5566; color: #ff2d55; }
+  .spinner { display: inline-block; width: 10px; height: 10px; border: 1px solid #00e5ff44; border-top-color: #00e5ff; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tl-wrap { overflow-x: auto; padding-bottom: 8px; }
+  .tl-inner { display: flex; flex-direction: column; }
+  .tl-header-row { display: flex; }
+  .tl-bar-row { display: flex; align-items: center; margin-bottom: 5px; }
+  .tl-label { width: 130px; flex-shrink: 0; padding-right: 6px; display: flex; align-items: center; gap: 6px; }
+  .tl-grid { position: relative; height: 20px; flex: 1; }
+  .tl-grid-lines { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; }
+  .tl-bar { position: absolute; top: 3px; height: 14px; border-radius: 2px; display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ===================== CONFIG — PASTE YOUR VALUES HERE ===================== -->
+<script>
+  const SUPABASE_URL  = "https://miljlwgyotuewrzhnhbb.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1pbGpsd2d5b3R1ZXdyemhuaGJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NzQ4MzAsImV4cCI6MjA5MTE1MDgzMH0.tQlDaJ20GAKKdo8YIiMtvSUVaglvN_wYf0r7hvLf2S0";
+</script>
+<!-- ========================================================================= -->
+
+<div id="toast"></div>
+<div id="app" style="max-width:700px;margin:0 auto;"></div>
+
+<script>
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const PRIORITIES = ["High","Medium","Low"];
+const P_COLOR = { High:"#ff2d55", Medium:"#f0c040", Low:"#00e5ff" };
+const P_DIM   = { High:"#7a1428", Medium:"#6b5200", Low:"#004d57" };
+const DEFAULT_CATS = ["Work","Personal","Health","Finance","Other","Bakery"];
+const TESCO_START = new Date("2026-03-02");
+const PERIOD_MAP = [
+  {p:"P1",wks:[1,2,3,4,5]},{p:"P2",wks:[6,7,8,9]},{p:"P3",wks:[10,11,12,13]},
+  {p:"P4",wks:[14,15,16,17,18]},{p:"P5",wks:[19,20,21,22]},{p:"P6",wks:[23,24,25,26]},
+  {p:"P7",wks:[27,28,29,30,31]},{p:"P8",wks:[32,33,34,35]},{p:"P9",wks:[36,37,38,39]},
+  {p:"P10",wks:[40,41,42,43,44]},{p:"P11",wks:[45,46,47,48]},{p:"P12",wks:[49,50,51,52]},
+];
+
+function wkMonday(w){const d=new Date(TESCO_START);d.setDate(d.getDate()+(w-1)*7);return d;}
+function fmtWkLabel(w){const m=wkMonday(w);return`${m.getDate()}.${m.getMonth()+1}`;}
+function dateToWk(s){
+  const d=new Date(s+"T00:00:00");
+  const diff=Math.floor((d-TESCO_START)/86400000);
+  if(diff<0)return 1;
+  return Math.min(Math.max(Math.floor(diff/7)+1,1),52);
+}
+function wkToDate(w){return wkMonday(w).toISOString().split("T")[0];}
+function todayStr(){return new Date().toISOString().split("T")[0];}
+function curWk(){return dateToWk(todayStr());}
+function periodOf(w){return(PERIOD_MAP.find(p=>p.wks.includes(w))||{p:""}).p;}
+
+let tasks=[], cats=[...DEFAULT_CATS];
+let curTab="list", curFilter="All", curSort="due";
+let showForm=false, editingTask=null, editingCat=null;
+let loading=true;
+
+function toast(msg,err=false){
+  const el=document.getElementById("toast");
+  el.textContent=msg; el.className="show"+(err?" err":"");
+  setTimeout(()=>el.className="",2200);
+}
+
+async function loadData(){
+  loading=true; render();
+  const {data:td,error:te}=await sb.from("tasks").select("*").order("created_at",{ascending:true});
+  const {data:cd,error:ce}=await sb.from("categories").select("*").order("sort_order",{ascending:true});
+  if(te||ce){ toast("DB ERROR — check Supabase config",true); loading=false; render(); return; }
+  tasks=td||[];
+  cats=(cd&&cd.length>0)?cd.map(r=>r.name):DEFAULT_CATS;
+  loading=false; render();
+}
+
+async function addTask(t){
+  const {data,error}=await sb.from("tasks").insert([t]).select().single();
+  if(error){toast("SAVE FAILED",true);return;}
+  tasks=[...tasks,data]; render();
+}
+async function updateTask(id,changes){
+  const {error}=await sb.from("tasks").update(changes).eq("id",id);
+  if(error){toast("UPDATE FAILED",true);return;}
+  tasks=tasks.map(t=>t.id===id?{...t,...changes}:t); render();
+}
+async function deleteTask(id){
+  const {error}=await sb.from("tasks").delete().eq("id",id);
+  if(error){toast("DELETE FAILED",true);return;}
+  tasks=tasks.filter(t=>t.id!==id); render();
+}
+async function purgeCompleted(){
+  const ids=tasks.filter(t=>t.done).map(t=>t.id);
+  await sb.from("tasks").delete().in("id",ids);
+  tasks=tasks.filter(t=>!t.done); render();
+}
+async function saveCats(newCats){
+  await sb.from("categories").delete().neq("name","__never__");
+  await sb.from("categories").insert(newCats.map((n,i)=>({name:n,sort_order:i})));
+  cats=newCats; render();
+}
+
+function el(tag,attrs={},children=[]){
+  const e=document.createElement(tag);
+  for(const[k,v]of Object.entries(attrs)){
+    if(k==="style"&&typeof v==="object"){Object.assign(e.style,v);}
+    else if(k.startsWith("on"))e.addEventListener(k.slice(2).toLowerCase(),v);
+    else e.setAttribute(k,v);
+  }
+  for(const c of children){
+    if(typeof c==="string")e.appendChild(document.createTextNode(c));
+    else if(c)e.appendChild(c);
+  }
+  return e;
+}
+function div(attrs,children){return el("div",attrs,children);}
+function btn(label,attrs,onClick){const b=el("button",{...attrs,onClick});b.innerHTML=label;return b;}
+function inp(attrs){return el("input",attrs);}
+function sel(attrs,options,value){
+  const s=el("select",attrs);
+  for(const o of options){
+    const op=el("option",{value:o.v||o},o.l?[o.l]:[o]);
+    if((o.v||o)===value)op.selected=true;
+    s.appendChild(op);
+  }
+  return s;
+}
+
+function renderApp(){
+  const app=document.getElementById("app");
+  app.innerHTML="";
+
+  if(loading){
+    app.appendChild(div({style:{padding:"2rem",color:"#00e5ff",fontSize:13,letterSpacing:2}},[
+      el("span",{class:"spinner"}),
+      document.createTextNode("CONNECTING TO DATABASE...")
+    ]));
+    return;
+  }
+
+  const cw=curWk();
+  const pending=tasks.filter(t=>!t.done).length;
+  const overdue=tasks.filter(t=>!t.done&&t.due&&t.due<todayStr()).length;
+
+  // Header
+  const header=div({style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"16px",borderBottom:"1px solid #00e5ff22",paddingBottom:"12px"}},[
+    div({},[
+      el("h1",{},[document.createTextNode("TASK_MATRIX")]),
+      div({style:{fontSize:"11px",color:"#5a7a8a",letterSpacing:"1px",marginTop:"2px"}},[
+        document.createTextNode(`${pending} PENDING`),
+        overdue>0?Object.assign(el("span"),{style:"color:#ff2d55;margin-left:8px",textContent:` / ${overdue} OVERDUE`}):null,
+        document.createTextNode(` / WK${cw} ACTIVE`),
+      ])
+    ]),
+    btn(showForm?"[ CANCEL ]":"[ + NEW TASK ]",{class:"primary",style:{fontSize:"11px"}},()=>{showForm=!showForm;render();})
+  ]);
+  app.appendChild(header);
+
+  // Add form
+  if(showForm){
+    let fTitle="",fDue="",fPri="Medium",fCat=cats[0]||"Personal";
+    const form=div({class:"card",style:{marginBottom:"14px",borderColor:"#00e5ff66"}});
+
+    const titleIn=inp({class:"",placeholder:"// task description...",style:{marginBottom:"8px",display:"block"}});
+    titleIn.addEventListener("keydown",e=>{if(e.key==="Enter")submitForm();});
+    form.appendChild(titleIn);
+
+    const grid=div({class:"grid3"});
+    const dueIn=inp({type:"date"});
+    const priSel=sel({},{options:PRIORITIES},fPri);
+    PRIORITIES.forEach(p=>{const o=priSel.querySelector(`option[value="${p}"]`)||priSel.options[PRIORITIES.indexOf(p)];if(o)o.value=p;});
+    const catSel=sel({},cats,cats[0]);
+
+    [["DUE_DATE",dueIn],["PRIORITY",priSel],["CATEGORY",catSel]].forEach(([label,control])=>{
+      const wrap=div({});
+      wrap.appendChild(div({class:"field-label"},[label]));
+      wrap.appendChild(control);
+      grid.appendChild(wrap);
+    });
+    form.appendChild(grid);
+    form.appendChild(div({style:{marginTop:"8px"}},[
+      btn("[ COMMIT TASK ]",{class:"primary",style:{fontSize:"11px"}},()=>{
+        const title=titleIn.value.trim();
+        if(!title)return;
+        addTask({title,due:dueIn.value||null,priority:priSel.value,category:catSel.value,done:false,created_at:new Date().toISOString()});
+        showForm=false;
+      })
+    ]));
+    app.appendChild(form);
+  }
+
+  // Tabs
+  const tabBar=div({class:"tab-bar"});
+  ["list","timeline","categories"].forEach(t=>{
+    const b=btn(t.toUpperCase(),{class:"tab"+(curTab===t?" active":"")},()=>{curTab=t;render();});
+    tabBar.appendChild(b);
+  });
+  app.appendChild(tabBar);
+
+  if(curTab==="list") renderList(app,cw);
+  else if(curTab==="timeline") renderTimeline(app,cw);
+  else renderCategories(app);
+}
+
+function renderList(app,cw){
+  const filtered=tasks
+    .filter(t=>curFilter==="All"||t.category===curFilter)
+    .sort((a,b)=>{
+      if(curSort==="due")return(a.due||"z")<(b.due||"z")?-1:1;
+      const po={High:0,Medium:1,Low:2};return po[a.priority]-po[b.priority];
+    });
+
+  // Filter bar
+  const filterBar=div({style:{display:"flex",gap:"6px",alignItems:"center",marginBottom:"12px",flexWrap:"wrap"}});
+  const pills=div({style:{display:"flex",gap:"4px",flexWrap:"wrap",flex:"1"}});
+  ["All",...cats].forEach(c=>{
+    pills.appendChild(btn(c,{class:"cat-pill"+(curFilter===c?" active":"")},()=>{curFilter=c;render();}));
+  });
+  filterBar.appendChild(pills);
+  const sortSel=sel({style:{width:"auto",flex:"none"}},
+    [{v:"due",l:"SORT:DUE"},{v:"priority",l:"SORT:PRIORITY"}],curSort);
+  sortSel.addEventListener("change",e=>{curSort=e.target.value;render();});
+  filterBar.appendChild(sortSel);
+  app.appendChild(filterBar);
+
+  if(filtered.length===0){
+    app.appendChild(div({style:{textAlign:"center",padding:"2rem",color:"#5a7a8a",fontSize:"12px",letterSpacing:"2px"}},[
+      tasks.length===0?"// NO TASKS FOUND":"// NO TASKS IN THIS SECTOR"
+    ]));
+    return;
+  }
+
+  const list=div({style:{display:"flex",flexDirection:"column",gap:"6px"}});
+  filtered.forEach(task=>{
+    const isOverdue=!task.done&&task.due&&task.due<todayStr();
+    const pc=P_COLOR[task.priority];
+    const isEditing=editingTask===task.id;
+    const taskWk=task.due?dateToWk(task.due):null;
+
+    const card=div({class:"card",style:{
+      opacity:task.done?"0.45":"1",
+      borderColor:isOverdue?"#ff2d5566":"#00e5ff33",
+      borderLeftWidth:"3px",
+      borderLeftColor:pc
+    }});
+
+    const row=div({class:"row-top"});
+
+    const chk=div({class:"check"+(task.done?" done":"")});
+    if(task.done)chk.innerHTML=`<svg width="9" height="7" viewBox="0 0 9 7"><path d="M1 3.5L3.5 6L8 1" stroke="#00e5ff" stroke-width="1.5" fill="none"/></svg>`;
+    chk.addEventListener("click",()=>updateTask(task.id,{done:!task.done}));
+
+    const body=div({class:"flex1"});
+    const title=div({class:"task-title",style:{color:task.done?"#5a7a8a":"#e0f0ff",textDecoration:task.done?"line-through":"none"}});
+    title.textContent=task.title;
+    body.appendChild(title);
+
+    const meta=div({class:"meta"});
+    const priBadge=el("span",{class:"pill",style:{background:P_DIM[task.priority],color:pc,border:`1px solid ${pc}44`}});
+    priBadge.textContent=task.priority.toUpperCase();
+    const catBadge=el("span",{class:"pill",style:{background:"#00e5ff0a",color:"#5a7a8a",border:"1px solid #00e5ff22"}});
+    catBadge.textContent=task.category;
+    meta.appendChild(priBadge);
+    meta.appendChild(catBadge);
+    if(task.due){
+      const dueLbl=el("span",{style:{fontSize:"10px",color:isOverdue?"#ff2d55":"#5a7a8a",letterSpacing:"1px"}});
+      dueLbl.textContent=`WK${taskWk} · ${task.due}${isOverdue?" [OVERDUE]":""}`;
+      meta.appendChild(dueLbl);
+    } else {
+      const nd=el("span",{style:{fontSize:"10px",color:"#5a7a8a",letterSpacing:"1px"}});
+      nd.textContent="NO_DUE_DATE";
+      meta.appendChild(nd);
+    }
+    body.appendChild(meta);
+
+    // Inline due week editor
+    if(isEditing){
+      const editRow=div({style:{marginTop:"8px",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}});
+      const lbl=el("span",{style:{fontSize:"10px",color:"#5a7a8a",letterSpacing:"1px"}});
+      lbl.textContent="SET_DUE_WEEK:";
+      const wkOptions=[{v:"",l:"-- none --"},...Array.from({length:52},(_,i)=>{
+        const w=i+1;return{v:String(w),l:`WK${w} · ${fmtWkLabel(w)} (${periodOf(w)})`};
+      })];
+      const wkSel=sel({style:{flex:"1",minWidth:"0"}},wkOptions,taskWk?String(taskWk):"");
+      wkSel.addEventListener("change",e=>{
+        const v=e.target.value;
+        updateTask(task.id,{due:v?wkToDate(parseInt(v)):null});
+      });
+      const doneBtn=btn("DONE",{style:{flexShrink:"0"}},()=>{editingTask=null;render();});
+      editRow.appendChild(lbl); editRow.appendChild(wkSel); editRow.appendChild(doneBtn);
+      body.appendChild(editRow);
+    }
+
+    const actions=div({style:{display:"flex",gap:"4px",flexShrink:"0"}});
+    actions.appendChild(btn(isEditing?"CLOSE":"EDIT",{style:{fontSize:"10px",padding:"3px 8px"}},()=>{
+      editingTask=isEditing?null:task.id; render();
+    }));
+    actions.appendChild(btn("DEL",{class:"danger",style:{fontSize:"10px",padding:"3px 8px"}},()=>deleteTask(task.id)));
+
+    row.appendChild(chk); row.appendChild(body); row.appendChild(actions);
+    card.appendChild(row);
+    list.appendChild(card);
+  });
+  app.appendChild(list);
+
+  if(tasks.some(t=>t.done)){
+    app.appendChild(btn(`[ PURGE ${tasks.filter(t=>t.done).length} COMPLETED ]`,
+      {class:"danger",style:{marginTop:"14px",fontSize:"10px"}},purgeCompleted));
+  }
+}
+
+function renderTimeline(app,cw){
+  const intro=div({style:{fontSize:"10px",color:"#5a7a8a",letterSpacing:"1px",marginBottom:"10px"}});
+  intro.textContent=`TESCO_CAL // WK${cw} → WK52 // BARS: CURRENT → DUE`;
+  app.appendChild(intro);
+
+  const withDue=tasks.filter(t=>t.due);
+  if(withDue.length===0){
+    app.appendChild(div({style:{textAlign:"center",padding:"2rem",color:"#5a7a8a",fontSize:"12px",letterSpacing:"2px"}},["// NO TASKS WITH DUE DATES"]));
+    return;
+  }
+
+  const CW=52;
+  const wkRange=Array.from({length:53-cw},(_,i)=>cw+i);
+  const periodsInRange=PERIOD_MAP.filter(({wks})=>wks.some(w=>w>=cw)).map(({p,wks})=>({p,wks:wks.filter(w=>w>=cw)}));
+
+  const wrap=div({class:"tl-wrap"});
+  const inner=div({style:{minWidth:`${wkRange.length*CW+140}px`}});
+
+  // Period row
+  const pRow=div({class:"tl-header-row",style:{marginLeft:"140px"}});
+  periodsInRange.forEach(({p,wks})=>{
+    const c=div({style:{width:`${wks.length*CW}px`,flexShrink:"0",textAlign:"center",fontSize:"10px",color:"#b44fff",background:"#1a0a2e",border:"1px solid #b44fff44",borderRadius:"2px",padding:"2px 0",marginRight:"1px",letterSpacing:"2px",boxSizing:"border-box"}});
+    c.textContent=p; pRow.appendChild(c);
+  });
+  inner.appendChild(pRow);
+
+  // Week row
+  const wRow=div({class:"tl-header-row",style:{marginLeft:"140px",marginTop:"2px",marginBottom:"8px"}});
+  wkRange.forEach(w=>{
+    const c=div({style:{width:`${CW}px`,flexShrink:"0",textAlign:"center",fontSize:"9px",color:w===cw?"#00e5ff":"#5a7a8a",background:w===cw?"#00e5ff12":"transparent",borderRadius:"2px",padding:"2px 0",boxSizing:"border-box",fontWeight:w===cw?"bold":"normal"}});
+    c.innerHTML=`<div>W${w}</div><div style="font-size:8px;opacity:.7">${fmtWkLabel(w)}</div>`;
+    if(w===cw)c.setAttribute("data-cur","1");
+    wRow.appendChild(c);
+  });
+  inner.appendChild(wRow);
+  setTimeout(()=>{const el=inner.querySelector("[data-cur]");if(el)el.scrollIntoView({inline:"start",block:"nearest"});},50);
+
+  // Bars
+  withDue.forEach(task=>{
+    const dw=dateToWk(task.due);
+    const isOverdue=!task.done&&task.due<todayStr();
+    const bc=task.done?"#2a3a3a":P_COLOR[task.priority];
+    const si=wkRange.indexOf(cw);
+    const ei=wkRange.indexOf(Math.max(dw,cw));
+
+    const row=div({class:"tl-bar-row"});
+    const lbl=div({class:"tl-label"});
+    const dot=div({style:{width:"6px",height:"6px",borderRadius:"50%",background:bc,flexShrink:"0"}});
+    const name=el("span",{style:{fontSize:"10px",color:isOverdue?"#ff2d55":task.done?"#5a7a8a":"#e0f0ff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:task.done?"line-through":"none",maxWidth:"115px",letterSpacing:"0"}});
+    name.textContent=task.title; name.title=task.title;
+    lbl.appendChild(dot); lbl.appendChild(name);
+
+    const grid=div({class:"tl-grid",style:{flex:"1"}});
+    const lines=div({class:"tl-grid-lines"});
+    wkRange.forEach(w=>{
+      lines.appendChild(div({style:{width:`${CW}px`,flexShrink:"0",borderLeft:`1px solid ${w===cw?"#00e5ff33":"#ffffff08"}`,background:w===cw?"#00e5ff06":"transparent"}}));
+    });
+    grid.appendChild(lines);
+
+    if(si>=0&&ei>=0){
+      const bar=div({class:"tl-bar",style:{left:`${si*CW+3}px`,width:`${Math.max((ei-si+1)*CW-6,12)}px`,background:bc,opacity:task.done?"0.3":"0.85"}});
+      bar.innerHTML=`<span style="font-size:8px;color:#000;font-weight:bold">W${dw}</span>`;
+      grid.appendChild(bar);
+    }
+    if(isOverdue&&dw<cw){
+      const di=wkRange.indexOf(dw);
+      if(di>=0){
+        const ob=div({class:"tl-bar",style:{left:`${di*CW+3}px`,width:`${Math.max((cw-dw)*CW-6,12)}px`,background:"#ff2d55",opacity:"0.25"}});
+        grid.appendChild(ob);
+      }
+    }
+
+    row.appendChild(lbl); row.appendChild(grid);
+    inner.appendChild(row);
+  });
+
+  // Legend
+  const legend=div({style:{display:"flex",gap:"14px",marginTop:"12px",paddingTop:"10px",borderTop:"1px solid #00e5ff22",flexWrap:"wrap"}});
+  PRIORITIES.forEach(p=>{
+    const item=div({style:{display:"flex",alignItems:"center",gap:"5px"}});
+    item.appendChild(div({style:{width:"8px",height:"8px",borderRadius:"1px",background:P_COLOR[p]}}));
+    const lbl=el("span",{style:{fontSize:"10px",color:"#5a7a8a",letterSpacing:"1px"}});
+    lbl.textContent=p.toUpperCase(); item.appendChild(lbl); legend.appendChild(item);
+  });
+  inner.appendChild(legend);
+  wrap.appendChild(inner);
+  app.appendChild(wrap);
+}
+
+function renderCategories(app){
+  const intro=div({style:{fontSize:"10px",color:"#5a7a8a",letterSpacing:"1px",marginBottom:"12px"}});
+  intro.textContent="CATEGORY_MANAGER // RENAME OR DELETE SECTORS";
+  app.appendChild(intro);
+
+  const list=div({style:{display:"flex",flexDirection:"column",gap:"6px",marginBottom:"14px"}});
+  cats.forEach((cat,idx)=>{
+    const count=tasks.filter(t=>t.category===cat).length;
+    const isEd=editingCat?.index===idx;
+    const card=div({class:"card",style:{display:"flex",alignItems:"center",gap:"8px"}});
+
+    if(isEd){
+      const inp2=el("input",{style:{flex:"1",background:"#0a0e1a",border:"1px solid #00e5ff66",color:"#e0f0ff",padding:"5px 8px",borderRadius:"4px",fontFamily:"'Courier New',monospace",fontSize:"12px",outline:"none"}});
+      inp2.value=editingCat.value;
+      inp2.addEventListener("input",e=>editingCat={...editingCat,value:e.target.value});
+      inp2.addEventListener("keydown",e=>{
+        if(e.key==="Enter"){doRename(idx,editingCat.value);}
+        if(e.key==="Escape"){editingCat=null;render();}
+      });
+      setTimeout(()=>inp2.focus(),10);
+      card.appendChild(inp2);
+    } else {
+      const lbl=el("span",{style:{flex:"1",fontSize:"12px",color:"#e0f0ff",letterSpacing:"1px"}});
+      lbl.textContent=cat; card.appendChild(lbl);
+    }
+
+    const cnt=el("span",{style:{fontSize:"10px",color:"#5a7a8a",letterSpacing:"1px",flexShrink:"0"}});
+    cnt.textContent=`${count} OBJ`; card.appendChild(cnt);
+
+    if(isEd){
+      card.appendChild(btn("SAVE",{class:"primary",style:{fontSize:"10px"}},()=>doRename(idx,editingCat.value)));
+      card.appendChild(btn("CANCEL",{style:{fontSize:"10px"}},()=>{editingCat=null;render();}));
+    } else {
+      card.appendChild(btn("RENAME",{style:{fontSize:"10px"}},()=>{editingCat={index:idx,value:cat};render();}));
+      const delB=btn("DELETE",{class:"danger",style:{fontSize:"10px"}},()=>{if(cats.length>1)doDelCat(idx);});
+      if(cats.length<=1)delB.disabled=true;
+      card.appendChild(delB);
+    }
+    list.appendChild(card);
+  });
+  app.appendChild(list);
+
+  const addRow=div({style:{display:"flex",gap:"8px"}});
+  const newIn=inp({placeholder:"// new category id..."});
+  const addBtn=btn("[ ADD ]",{class:"primary"},()=>{
+    const v=newIn.value.trim();
+    if(!v||cats.includes(v))return;
+    saveCats([...cats,v]); newIn.value="";
+  });
+  addRow.appendChild(newIn); addRow.appendChild(addBtn);
+  app.appendChild(addRow);
+}
+
+async function doRename(idx,val){
+  val=val.trim(); if(!val)return;
+  const old=cats[idx];
+  const nc=cats.map((c,i)=>i===idx?val:c);
+  const tasksToUpdate=tasks.filter(t=>t.category===old);
+  for(const t of tasksToUpdate){
+    await sb.from("tasks").update({category:val}).eq("id",t.id);
+  }
+  tasks=tasks.map(t=>t.category===old?{...t,category:val}:t);
+  if(curFilter===old)curFilter=val;
+  editingCat=null;
+  await saveCats(nc);
+}
+async function doDelCat(idx){
+  const name=cats[idx];
+  const nc=cats.filter((_,i)=>i!==idx);
+  const fallback=nc[0]||"Other";
+  const tasksToUpdate=tasks.filter(t=>t.category===name);
+  for(const t of tasksToUpdate){
+    await sb.from("tasks").update({category:fallback}).eq("id",t.id);
+  }
+  tasks=tasks.map(t=>t.category===name?{...t,category:fallback}:t);
+  if(curFilter===name)curFilter="All";
+  await saveCats(nc);
+}
+
+function render(){ renderApp(); }
+loadData();
+</script>
+</body>
+</html>
