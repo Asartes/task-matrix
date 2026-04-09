@@ -69,11 +69,12 @@
   #toast.err { border-color: #ff2d5566; color: #ff2d55; }
   .spinner { display: inline-block; width: 10px; height: 10px; border: 1px solid #00e5ff44; border-top-color: #00e5ff; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .tl-wrap::-webkit-scrollbar { height: 8px; }
-  .tl-wrap::-webkit-scrollbar-track { background: #0f0f1e; border-radius: 4px; }
-  .tl-wrap::-webkit-scrollbar-thumb { background: #00e5ff55; border-radius: 4px; }
-  .tl-wrap::-webkit-scrollbar-thumb:hover { background: #00e5ffaa; }
-  .tl-wrap { scrollbar-color: #00e5ff55 #0f0f1e; scrollbar-width: thin; }
+  .tl-wrap { overflow-x: auto; padding-bottom: 12px; }
+  .tl-wrap::-webkit-scrollbar { height: 10px; }
+  .tl-wrap::-webkit-scrollbar-track { background: #1a1a2e; border-radius: 4px; }
+  .tl-wrap::-webkit-scrollbar-thumb { background: #00e5ff88; border-radius: 4px; border: 2px solid #1a1a2e; }
+  .tl-wrap::-webkit-scrollbar-thumb:hover { background: #00e5ffcc; }
+  .tl-wrap { scrollbar-color: #00e5ff88 #1a1a2e; scrollbar-width: thin; }
   .tl-inner { display: flex; flex-direction: column; }
   .tl-header-row { display: flex; }
   .tl-bar-row { display: flex; align-items: center; margin-bottom: 5px; }
@@ -93,7 +94,7 @@
 <!-- ========================================================================= -->
 
 <div id="toast"></div>
-<div id="app" style="max-width:700px;margin:0 auto;"></div>
+<div id="app" style="max-width:1400px;margin:0 auto;"></div>
 
 <script>
 const { createClient } = supabase;
@@ -266,15 +267,24 @@ function renderApp(){
 
   // Tabs
   const tabBar=div({class:"tab-bar"});
-  ["list","timeline","categories"].forEach(t=>{
+  ["list","categories"].forEach(t=>{
     const b=btn(t.toUpperCase(),{class:"tab"+(curTab===t?" active":"")},()=>{curTab=t;render();});
     tabBar.appendChild(b);
   });
   app.appendChild(tabBar);
 
-  if(curTab==="list") renderList(app,cw);
-  else if(curTab==="timeline") renderTimeline(app,cw);
-  else renderCategories(app);
+  if(curTab==="list"){
+    const layout=div({class:"main-layout"});
+    const listCol=div({class:"list-col"});
+    const tlCol=div({class:"timeline-col"});
+    renderList(listCol,cw);
+    renderTimeline(tlCol,cw);
+    layout.appendChild(listCol);
+    layout.appendChild(tlCol);
+    app.appendChild(layout);
+  } else {
+    renderCategories(app);
+  }
 }
 
 function renderList(app,cw){
@@ -385,6 +395,87 @@ function renderList(app,cw){
 }
 
 function renderTimeline(app,cw){
+  const intro=div({style:{fontSize:"11px",color:"#5a7a8a",letterSpacing:"1px",marginBottom:"10px",borderBottom:"1px solid #00e5ff22",paddingBottom:"8px"}});
+  intro.textContent=`TIMELINE // WK${cw} → WK52`;
+  app.appendChild(intro);
+
+  const withDue=tasks.filter(t=>t.due);
+  if(withDue.length===0){
+    app.appendChild(div({style:{padding:"1rem",color:"#5a7a8a",fontSize:"12px",letterSpacing:"2px"}},["// NO DUE DATES SET"]));
+    return;
+  }
+
+  const CW=52;
+  const wkRange=Array.from({length:53-cw},(_,i)=>cw+i);
+  const periodsInRange=PERIOD_MAP.filter(({wks})=>wks.some(w=>w>=cw)).map(({p,wks})=>({p,wks:wks.filter(w=>w>=cw)}));
+
+  const wrap=div({class:"tl-wrap"});
+  const inner=div({style:{minWidth:`${wkRange.length*CW+150}px`}});
+
+  const pRow=div({class:"tl-header-row",style:{marginLeft:"150px"}});
+  periodsInRange.forEach(({p,wks})=>{
+    const c=div({style:{width:`${wks.length*CW}px`,flexShrink:"0",textAlign:"center",fontSize:"11px",color:"#b44fff",background:"#1a0a2e",border:"1px solid #b44fff44",borderRadius:"2px",padding:"2px 0",marginRight:"1px",letterSpacing:"2px",boxSizing:"border-box"}});
+    c.textContent=p; pRow.appendChild(c);
+  });
+  inner.appendChild(pRow);
+
+  const wRow=div({class:"tl-header-row",style:{marginLeft:"150px",marginTop:"2px",marginBottom:"10px"}});
+  wkRange.forEach(w=>{
+    const c=div({style:{width:`${CW}px`,flexShrink:"0",textAlign:"center",fontSize:"10px",color:w===cw?"#00e5ff":"#5a7a8a",background:w===cw?"#00e5ff12":"transparent",borderRadius:"2px",padding:"2px 0",boxSizing:"border-box",fontWeight:w===cw?"bold":"normal"}});
+    c.innerHTML=`<div>W${w}</div><div style="font-size:9px;opacity:.7">${fmtWkLabel(w)}</div>`;
+    wRow.appendChild(c);
+  });
+  inner.appendChild(wRow);
+
+  withDue.forEach(task=>{
+    const dw=dateToWk(task.due);
+    const isOverdue=!task.done&&task.due<todayStr();
+    const bc=task.done?"#2a3a3a":P_COLOR[task.priority];
+    const clampedStart=Math.max(dw>=cw?cw:cw, cw);
+    const clampedEnd=Math.max(dw,cw);
+    const si=wkRange.indexOf(clampedStart);
+    const ei=wkRange.indexOf(clampedEnd);
+
+    const row=div({class:"tl-bar-row"});
+    const lbl=div({class:"tl-label",style:{width:"146px"}});
+    const dot=div({style:{width:"7px",height:"7px",borderRadius:"50%",background:bc,flexShrink:"0"}});
+    const name=el("span",{style:{fontSize:"11px",color:isOverdue?"#ff2d55":task.done?"#5a7a8a":"#e0f0ff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:task.done?"line-through":"none",maxWidth:"128px"}});
+    name.textContent=task.title; name.title=task.title;
+    lbl.appendChild(dot); lbl.appendChild(name);
+
+    const grid=div({class:"tl-grid",style:{flex:"1"}});
+    const lines=div({class:"tl-grid-lines"});
+    wkRange.forEach(w=>{
+      lines.appendChild(div({style:{width:`${CW}px`,flexShrink:"0",borderLeft:`1px solid ${w===cw?"#00e5ff33":"#ffffff08"}`,background:w===cw?"#00e5ff06":"transparent"}}));
+    });
+    grid.appendChild(lines);
+
+    if(si>=0&&ei>=0){
+      const bar=div({class:"tl-bar",style:{left:`${si*CW+3}px`,width:`${Math.max((ei-si+1)*CW-6,12)}px`,background:bc,opacity:task.done?"0.3":"0.85"}});
+      bar.innerHTML=`<span style="font-size:9px;color:#000;font-weight:bold">W${dw}</span>`;
+      grid.appendChild(bar);
+    }
+    if(isOverdue&&dw<cw){
+      grid.innerHTML+="";
+      const ob=div({class:"tl-bar",style:{left:"3px",width:`${Math.max(CW-6,12)}px`,background:"#ff2d55",opacity:"0.25"}});
+      grid.appendChild(ob);
+    }
+
+    row.appendChild(lbl); row.appendChild(grid);
+    inner.appendChild(row);
+  });
+
+  const legend=div({style:{display:"flex",gap:"14px",marginTop:"14px",paddingTop:"10px",borderTop:"1px solid #00e5ff22",flexWrap:"wrap"}});
+  PRIORITIES.forEach(p=>{
+    const item=div({style:{display:"flex",alignItems:"center",gap:"5px"}});
+    item.appendChild(div({style:{width:"8px",height:"8px",borderRadius:"1px",background:P_COLOR[p]}}));
+    const lbl=el("span",{style:{fontSize:"11px",color:"#5a7a8a",letterSpacing:"1px"}});
+    lbl.textContent=p.toUpperCase(); item.appendChild(lbl); legend.appendChild(item);
+  });
+  inner.appendChild(legend);
+  wrap.appendChild(inner);
+  app.appendChild(wrap);
+}
   const intro=div({style:{fontSize:"10px",color:"#5a7a8a",letterSpacing:"1px",marginBottom:"10px"}});
   intro.textContent=`TESCO_CAL // WK${cw} → WK52 // BARS: CURRENT → DUE`;
   app.appendChild(intro);
